@@ -12,77 +12,21 @@ def sortear_proposicoes(quantidade):
     return proposicoes
 
 
-def criar_expressao_aleatoria(nomes):
-    termos = []
-    operadores = []
-    partes_expressao = []
-    operadores_disponiveis = list(OPERADORES_BINARIOS.keys())
-
-    for indice, nome in enumerate(nomes):
-        negado = random.choice([True, False])
-        texto = nome
-
-        if negado:
-            texto = f"NAO {nome}"
-
-        termos.append((nome, negado))
-        partes_expressao.append(texto)
-
-        if indice < len(nomes) - 1:
-            operador = random.choice(operadores_disponiveis)
-            operadores.append(operador)
-            partes_expressao.append(OPERADORES_BINARIOS[operador])
-
-    expressao = " ".join(partes_expressao)
-
-    return expressao, termos, operadores
-
-
-def criar_opcoes_aleatorias(nomes, quantidade_opcoes):
-    opcoes = []
-    expressoes_usadas = []
-    tentativas = 0
-
-    while len(opcoes) < quantidade_opcoes and tentativas < 100:
-        expressao, termos, operadores = criar_expressao_aleatoria(nomes)
-        tentativas += 1
-
-        if expressao in expressoes_usadas:
-            continue
-
-        verdadeiros, total = calcular_chance_verdadeira(nomes, termos, operadores)
-        multiplicador = calcular_multiplicador(verdadeiros, total)
-
-        opcoes.append(
-            {
-                "expressao": expressao,
-                "termos": termos,
-                "operadores": operadores,
-                "verdadeiros": verdadeiros,
-                "total": total,
-                "multiplicador": multiplicador,
-            }
-        )
-        expressoes_usadas.append(expressao)
-
-    return opcoes
-
-
 def aplicar_nao(valor):
     return not valor
 
 
 def aplicar_operador(operador, esquerda, direita):
-    if operador == "E":
+    if operador in ("E", "∧"):
         return esquerda and direita
 
-    if operador == "OU":
+    if operador in ("OU", "∨"):
         return esquerda or direita
 
-    if operador == "SE":
+    if operador in ("SE", "->", "→"):
         return (not esquerda) or direita
 
-    if operador == "SSE":
+    if operador in ("SSE", "<->", "↔"):
         return esquerda == direita
 
     raise ValueError(f"Operador invalido: {operador}")
@@ -151,8 +95,12 @@ def calcular_multiplicador_jackpot(quantidade_proposicoes):
     return quantidade_proposicoes
 
 
-def calcular_rodada(saldo, aposta, resultado, multiplicador, quantidade_proposicoes):
-    jackpot = resultado and multiplicador > 1
+def todas_proposicoes_verdadeiras(proposicoes):
+    return all(proposicoes.values())
+
+
+def calcular_rodada(saldo, aposta, resultado, multiplicador, quantidade_proposicoes, proposicoes):
+    jackpot = resultado and todas_proposicoes_verdadeiras(proposicoes)
 
     if resultado:
         multiplicador_final = multiplicador

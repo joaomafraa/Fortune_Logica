@@ -34,23 +34,6 @@ def exibir_chance(verdadeiros, total, multiplicador):
     print(f"Multiplicador definido: {formatar_multiplicador(multiplicador)}")
 
 
-def exibir_opcoes_aleatorias(opcoes):
-    print()
-    print("Expressoes aleatorias sugeridas:")
-
-    for indice, opcao in enumerate(opcoes, start=1):
-        chance = (opcao["verdadeiros"] / opcao["total"]) * 100
-        multiplicador = formatar_multiplicador(opcao["multiplicador"])
-
-        print(
-            f"{indice} - {opcao['expressao']} "
-            f"| Chance: {chance:.2f}% "
-            f"| Multiplicador: {multiplicador}"
-        )
-
-    print("0 - Montar minha propria expressao")
-
-
 def exibir_resultado(expressao, resultado, saldo, variacao, multiplicador, jackpot):
     print()
     print("-" * 44)

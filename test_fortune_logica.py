@@ -1,5 +1,5 @@
-import unittest
 import os
+import unittest
 from tempfile import TemporaryDirectory
 
 from funcoes.logica import (
@@ -11,9 +11,9 @@ from funcoes.logica import (
     calcular_multiplicador,
     calcular_multiplicador_jackpot,
     calcular_rodada,
-    criar_expressao_aleatoria,
-    criar_opcoes_aleatorias,
+    todas_proposicoes_verdadeiras,
 )
+from funcoes.interface_pygame import analisar_tokens, calcular_preview, formatar_expressao
 from funcoes.saldo import carregar_saldo, salvar_saldo
 
 
@@ -34,11 +34,15 @@ class TestFortuneLogica(unittest.TestCase):
         self.assertIs(aplicar_operador("SE", True, False), False)
         self.assertIs(aplicar_operador("SE", True, True), True)
         self.assertIs(aplicar_operador("SE", False, False), True)
+        self.assertIs(aplicar_operador("SE", False, True), True)
+        self.assertIs(aplicar_operador("->", True, False), False)
 
     def test_operador_sse_bicondicional(self):
         self.assertIs(aplicar_operador("SSE", True, True), True)
         self.assertIs(aplicar_operador("SSE", False, False), True)
         self.assertIs(aplicar_operador("SSE", True, False), False)
+        self.assertIs(aplicar_operador("SSE", False, True), False)
+        self.assertIs(aplicar_operador("<->", True, True), True)
 
     def test_avaliar_expressao_da_esquerda_para_direita(self):
         valores = [True, False, False]
@@ -72,35 +76,23 @@ class TestFortuneLogica(unittest.TestCase):
         self.assertAlmostEqual(calcular_multiplicador(3, 4), 1.3333333333333333)
         self.assertEqual(calcular_multiplicador(4, 4), 1)
 
-    def test_criar_expressao_aleatoria_usa_todas_as_proposicoes(self):
-        expressao, termos, operadores = criar_expressao_aleatoria(["P", "Q", "R"])
-
-        self.assertTrue(expressao)
-        self.assertEqual(len(termos), 3)
-        self.assertEqual(len(operadores), 2)
-
-    def test_criar_opcoes_aleatorias_mostra_multiplicador(self):
-        opcoes = criar_opcoes_aleatorias(["P", "Q"], 2)
-
-        self.assertGreaterEqual(len(opcoes), 1)
-
-        for opcao in opcoes:
-            self.assertIn("expressao", opcao)
-            self.assertIn("multiplicador", opcao)
-            self.assertGreater(opcao["multiplicador"], 0)
-
     def test_multiplicador_jackpot_depende_da_quantidade_de_proposicoes(self):
         self.assertEqual(calcular_multiplicador_jackpot(1), 1)
         self.assertEqual(calcular_multiplicador_jackpot(2), 2)
         self.assertEqual(calcular_multiplicador_jackpot(6), 6)
 
-    def test_vitoria_com_jackpot_multiplica_pela_quantidade_de_proposicoes(self):
+    def test_todas_proposicoes_verdadeiras(self):
+        self.assertTrue(todas_proposicoes_verdadeiras({"P": True, "Q": True}))
+        self.assertFalse(todas_proposicoes_verdadeiras({"P": True, "Q": False}))
+
+    def test_vitoria_com_jackpot_somente_quando_todas_proposicoes_sao_verdadeiras(self):
         saldo, variacao, multiplicador, jackpot = calcular_rodada(
             100,
             10,
             True,
             2,
             3,
+            {"P": True, "Q": True, "R": True},
         )
 
         self.assertEqual(saldo, 150)
@@ -108,18 +100,19 @@ class TestFortuneLogica(unittest.TestCase):
         self.assertEqual(multiplicador, 6)
         self.assertIs(jackpot, True)
 
-    def test_vitoria_sem_jackpot_nao_dobra_multiplicador(self):
+    def test_vitoria_sem_jackpot_quando_alguma_proposicao_e_falsa(self):
         saldo, variacao, multiplicador, jackpot = calcular_rodada(
             100,
             10,
             True,
-            1,
+            2,
             3,
+            {"P": True, "Q": False, "R": True},
         )
 
-        self.assertEqual(saldo, 100)
-        self.assertEqual(variacao, 0)
-        self.assertEqual(multiplicador, 1)
+        self.assertEqual(saldo, 110)
+        self.assertEqual(variacao, 10)
+        self.assertEqual(multiplicador, 2)
         self.assertIs(jackpot, False)
 
     def test_derrota_subtrai_aposta(self):
@@ -129,12 +122,48 @@ class TestFortuneLogica(unittest.TestCase):
             False,
             4,
             3,
+            {"P": True, "Q": True, "R": True},
         )
 
         self.assertEqual(saldo, 90)
         self.assertEqual(variacao, -10)
         self.assertEqual(multiplicador, 4)
         self.assertIs(jackpot, False)
+
+    def test_analisar_tokens_validos(self):
+        dados, mensagem = analisar_tokens(["NAO", "P", "E", "Q"], ["P", "Q"])
+
+        self.assertEqual(mensagem, "Expressao valida.")
+        self.assertEqual(dados["expressao"], "NAO P E Q")
+        self.assertEqual(dados["termos"], [("P", True), ("Q", False)])
+        self.assertEqual(dados["operadores"], ["E"])
+
+    def test_analisar_tokens_invalidos(self):
+        dados, mensagem = analisar_tokens(["P", "Q"], ["P", "Q"])
+
+        self.assertIsNone(dados)
+        self.assertEqual(mensagem, "Escolha um operador antes da proxima proposicao.")
+
+    def test_calcular_preview_valido(self):
+        preview = calcular_preview(["P", "E", "Q"], ["P", "Q"])
+
+        self.assertTrue(preview["valida"])
+        self.assertEqual(preview["verdadeiros"], 1)
+        self.assertEqual(preview["total"], 4)
+        self.assertEqual(preview["multiplicador"], 4)
+
+    def test_formatar_expressao_vazia(self):
+        self.assertEqual(
+            formatar_expressao([]),
+            "Monte sua expressao nos slots",
+        )
+
+    def test_analisar_tokens_de_slots_com_todas_premissas(self):
+        dados, mensagem = analisar_tokens(["P", "E", "Q", "OU", "R"], ["P", "Q", "R"])
+
+        self.assertEqual(mensagem, "Expressao valida.")
+        self.assertEqual(dados["termos"], [("P", False), ("Q", False), ("R", False)])
+        self.assertEqual(dados["operadores"], ["E", "OU"])
 
     def test_operador_invalido_gera_erro(self):
         with self.assertRaises(ValueError):

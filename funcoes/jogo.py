@@ -3,7 +3,6 @@ from funcoes.entrada import ler_inteiro, ler_operador, ler_sim_nao
 from funcoes.interface import (
     exibir_cabecalho,
     exibir_chance,
-    exibir_opcoes_aleatorias,
     exibir_proposicoes,
     exibir_resultado,
 )
@@ -12,7 +11,6 @@ from funcoes.logica import (
     calcular_chance_verdadeira,
     calcular_multiplicador,
     calcular_rodada,
-    criar_opcoes_aleatorias,
     sortear_proposicoes,
 )
 from funcoes.saldo import carregar_saldo, salvar_saldo
@@ -48,31 +46,18 @@ def montar_expressao(nomes):
 
 def escolher_expressao(nomes):
     while True:
-        opcoes = criar_opcoes_aleatorias(nomes, 3)
-        exibir_opcoes_aleatorias(opcoes)
-
-        escolha = ler_inteiro("Escolha uma expressao pronta ou 0 para montar: ", 0, len(opcoes))
-
-        if escolha == 0:
-            expressao, termos, operadores = montar_expressao(nomes)
-        else:
-            opcao = opcoes[escolha - 1]
-            expressao = opcao["expressao"]
-            termos = opcao["termos"]
-            operadores = opcao["operadores"]
-
-            print()
-            print(f"Expressao escolhida: {expressao}")
-
+        expressao, termos, operadores = montar_expressao(nomes)
         verdadeiros, total = calcular_chance_verdadeira(nomes, termos, operadores)
         multiplicador = calcular_multiplicador(verdadeiros, total)
+        print()
+        print(f"Expressao montada: {expressao}")
         exibir_chance(verdadeiros, total, multiplicador)
 
-        if ler_sim_nao("Deseja continuar com essa probabilidade? (S/N): "):
+        if ler_sim_nao("Deseja apostar nessa probabilidade e multiplicador? (S/N): "):
             return expressao, termos, operadores, verdadeiros, total, multiplicador
 
         print()
-        print("Tudo bem. Escolha ou monte outra expressao.")
+        print("Tudo bem. Monte outra expressao.")
 
 
 def jogar_rodada(saldo):
@@ -96,6 +81,7 @@ def jogar_rodada(saldo):
         resultado,
         multiplicador,
         quantidade,
+        proposicoes,
     )
     exibir_resultado(expressao, resultado, novo_saldo, variacao, multiplicador, jackpot)
 
