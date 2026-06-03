@@ -290,13 +290,7 @@ class InterfacePygame:
 
         pygame.init()
         pygame.display.set_caption("Fortune Logica")
-        self.tela_cheia = False
-        self.janela = None
-        self.tela = pygame.Surface((LARGURA, ALTURA))
-        self.escala_tela = 1
-        self.offset_tela = (0, 0)
-        self.tamanho_tela = (LARGURA, ALTURA)
-        self.criar_janela()
+        self.tela = pygame.display.set_mode((LARGURA, ALTURA))
         self.relogio = pygame.time.Clock()
         self.fonte_titulo = pygame.font.SysFont("arial", 42, bold=True)
         self.fonte_expressao = pygame.font.SysFont("arial", 34, bold=True)
@@ -349,52 +343,6 @@ class InterfacePygame:
         self.slot_premissas = []
         self.slot_operadores = []
         self.resetar_slots()
-
-    def criar_janela(self):
-        if self.tela_cheia:
-            info = pygame.display.Info()
-            tamanho = (info.current_w, info.current_h)
-            self.janela = pygame.display.set_mode(tamanho, pygame.FULLSCREEN)
-        else:
-            self.janela = pygame.display.set_mode((LARGURA, ALTURA))
-
-        self.atualizar_viewport()
-
-    def alternar_tela_cheia(self):
-        self.tela_cheia = not self.tela_cheia
-        self.criar_janela()
-
-    def atualizar_viewport(self):
-        largura_janela, altura_janela = self.janela.get_size()
-        escala = min(largura_janela / LARGURA, altura_janela / ALTURA)
-        largura = int(LARGURA * escala)
-        altura = int(ALTURA * escala)
-
-        self.escala_tela = escala
-        self.tamanho_tela = (largura, altura)
-        self.offset_tela = (
-            (largura_janela - largura) // 2,
-            (altura_janela - altura) // 2,
-        )
-
-    def apresentar_tela(self):
-        if self.tamanho_tela == (LARGURA, ALTURA):
-            self.janela.blit(self.tela, (0, 0))
-        else:
-            self.janela.fill(PRETO)
-            imagem = pygame.transform.smoothscale(self.tela, self.tamanho_tela)
-            self.janela.blit(imagem, self.offset_tela)
-
-        pygame.display.flip()
-
-    def posicao_logica_mouse(self, posicao):
-        x = (posicao[0] - self.offset_tela[0]) / self.escala_tela
-        y = (posicao[1] - self.offset_tela[1]) / self.escala_tela
-
-        if not 0 <= x < LARGURA or not 0 <= y < ALTURA:
-            return None
-
-        return int(x), int(y)
 
     def carregar_fundo(self):
         for caminho in CAMINHOS_FUNDO:
@@ -1164,7 +1112,7 @@ class InterfacePygame:
         for botao in self.botoes:
             botao.desenhar(self.tela, self.fonte_pequena)
 
-        self.apresentar_tela()
+        pygame.display.flip()
 
     def desenhar_expressao_slots(self, preview):
         self.slot_premissas = []
@@ -1302,12 +1250,6 @@ class InterfacePygame:
             if evento.type == pygame.QUIT:
                 self.rodando = False
             elif evento.type == pygame.KEYDOWN:
-                if evento.key == pygame.K_F11 or (
-                    evento.key == pygame.K_RETURN and evento.mod & pygame.KMOD_ALT
-                ):
-                    self.alternar_tela_cheia()
-                    continue
-
                 if self.animando:
                     continue
                 self.tratar_digitacao(evento)
@@ -1315,39 +1257,35 @@ class InterfacePygame:
                 if self.animando:
                     continue
 
-                posicao = self.posicao_logica_mouse(evento.pos)
-                if posicao is None:
-                    continue
-
                 if self.tela_resultado:
                     for botao in self.botoes:
-                        if botao.clicou(posicao):
+                        if botao.clicou(evento.pos):
                             botao.acao()
                             break
                     return
 
-                if self.campo_aposta.clicou(posicao):
+                if self.campo_aposta.clicou(evento.pos):
                     self.campo_ativo = "aposta"
                     return
 
-                if self.campo_quantidade.clicou(posicao):
+                if self.campo_quantidade.clicou(evento.pos):
                     self.campo_ativo = "quantidade"
                     return
 
                 self.campo_ativo = None
 
                 for rect, indice in self.slot_premissas:
-                    if rect.collidepoint(posicao):
+                    if rect.collidepoint(evento.pos):
                         self.alternar_negacao(indice)
                         return
 
                 for rect, indice in self.slot_operadores:
-                    if rect.collidepoint(posicao):
+                    if rect.collidepoint(evento.pos):
                         self.alternar_operador(indice)
                         return
 
                 for botao in self.botoes:
-                    if botao.clicou(posicao):
+                    if botao.clicou(evento.pos):
                         botao.acao()
                         break
 

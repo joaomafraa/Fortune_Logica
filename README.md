@@ -116,7 +116,7 @@ Ele simplesmente inverte o valor:
 | Arquivo | Funcao no projeto |
 | --- | --- |
 | `fortune_logica.py` | Inicia o jogo |
-| `funcoes/interface_pygame.py` | Tela, botoes, sons, animacoes e tela cheia |
+| `funcoes/interface_pygame.py` | Tela, botoes, sons e animacoes |
 | `funcoes/logica.py` | Regras de logica, chance, multiplicador e jackpot |
 | `funcoes/saldo.py` | Salva e carrega o saldo do jogador |
 | `funcoes/constantes.py` | Guarda as premissas usadas no jogo |
@@ -140,7 +140,6 @@ python -m funcoes.interface_pygame
 
 - Clique nos operadores para trocar entre `E`, `OU`, `SE` e `SSE`.
 - Clique nas premissas para colocar ou tirar `NAO`.
-- Use `F11` ou `Alt+Enter` para tela cheia.
 - Clique em `GIRAR` para iniciar a rodada.
 
 ## O Que Foi Usado
