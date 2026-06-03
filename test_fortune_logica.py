@@ -8,6 +8,7 @@ from funcoes.logica import (
     avaliar_expressao,
     avaliar_expressao_com_proposicoes,
     calcular_chance_verdadeira,
+    calcular_jackpot_possivel,
     calcular_multiplicador,
     calcular_multiplicador_jackpot,
     calcular_rodada,
@@ -70,11 +71,21 @@ class TestFortuneLogica(unittest.TestCase):
         self.assertEqual(verdadeiros, 1)
         self.assertEqual(total, 4)
 
-    def test_calcular_multiplicador_paga_mais_para_menor_chance(self):
-        self.assertEqual(calcular_multiplicador(1, 4), 4)
-        self.assertEqual(calcular_multiplicador(2, 4), 2)
-        self.assertAlmostEqual(calcular_multiplicador(3, 4), 1.3333333333333333)
-        self.assertEqual(calcular_multiplicador(4, 4), 1)
+    def test_calcular_multiplicador_aplica_vantagem_do_cassino(self):
+        self.assertAlmostEqual(calcular_multiplicador(1, 4), 3.6)
+        self.assertAlmostEqual(calcular_multiplicador(2, 4), 1.8)
+        self.assertAlmostEqual(calcular_multiplicador(3, 4), 1.2)
+        self.assertAlmostEqual(calcular_multiplicador(4, 4), 0.9)
+
+    def test_calcular_multiplicador_desconta_peso_do_jackpot(self):
+        self.assertAlmostEqual(
+            calcular_multiplicador(1, 4, 2, jackpot_possivel=True),
+            1.8,
+        )
+
+    def test_calcular_jackpot_possivel_depende_da_expressao_com_todas_verdadeiras(self):
+        self.assertTrue(calcular_jackpot_possivel([("P", False), ("Q", False)], ["E"]))
+        self.assertFalse(calcular_jackpot_possivel([("P", True), ("Q", False)], ["E"]))
 
     def test_multiplicador_jackpot_depende_da_quantidade_de_proposicoes(self):
         self.assertEqual(calcular_multiplicador_jackpot(1), 1)
@@ -150,7 +161,7 @@ class TestFortuneLogica(unittest.TestCase):
         self.assertTrue(preview["valida"])
         self.assertEqual(preview["verdadeiros"], 1)
         self.assertEqual(preview["total"], 4)
-        self.assertEqual(preview["multiplicador"], 4)
+        self.assertAlmostEqual(preview["multiplicador"], 1.8)
 
     def test_formatar_expressao_vazia(self):
         self.assertEqual(

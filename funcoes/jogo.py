@@ -9,6 +9,7 @@ from funcoes.interface import (
 from funcoes.logica import (
     avaliar_expressao_com_proposicoes,
     calcular_chance_verdadeira,
+    calcular_jackpot_possivel,
     calcular_multiplicador,
     calcular_rodada,
     sortear_proposicoes,
@@ -48,7 +49,13 @@ def escolher_expressao(nomes):
     while True:
         expressao, termos, operadores = montar_expressao(nomes)
         verdadeiros, total = calcular_chance_verdadeira(nomes, termos, operadores)
-        multiplicador = calcular_multiplicador(verdadeiros, total)
+        jackpot_possivel = calcular_jackpot_possivel(termos, operadores)
+        multiplicador = calcular_multiplicador(
+            verdadeiros,
+            total,
+            len(nomes),
+            jackpot_possivel,
+        )
         print()
         print(f"Expressao montada: {expressao}")
         exibir_chance(verdadeiros, total, multiplicador)

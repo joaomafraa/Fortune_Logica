@@ -2,6 +2,8 @@ import random
 
 from funcoes.constantes import OPERADORES_BINARIOS, PROPOSICOES
 
+VANTAGEM_CASSINO = 0.10
+
 
 def sortear_proposicoes(quantidade):
     proposicoes = {}
@@ -81,11 +83,39 @@ def calcular_chance_verdadeira(nomes, termos, operadores):
     return verdadeiros, total
 
 
-def calcular_multiplicador(verdadeiros, total):
+def calcular_jackpot_possivel(termos, operadores):
+    proposicoes_verdadeiras = {}
+
+    for nome, _ in termos:
+        proposicoes_verdadeiras[nome] = True
+
+    return avaliar_expressao_com_proposicoes(
+        termos,
+        operadores,
+        proposicoes_verdadeiras,
+    )
+
+
+def calcular_multiplicador(
+    verdadeiros,
+    total,
+    quantidade_proposicoes=0,
+    jackpot_possivel=False,
+    vantagem_cassino=VANTAGEM_CASSINO,
+):
     if verdadeiros == 0:
         return 0
 
-    return total / verdadeiros
+    peso_jackpot = 0
+
+    if jackpot_possivel:
+        multiplicador_jackpot = calcular_multiplicador_jackpot(quantidade_proposicoes)
+        peso_jackpot = multiplicador_jackpot - 1
+
+    retorno_alvo = 1 - vantagem_cassino
+    peso_pagamento = verdadeiros + peso_jackpot
+
+    return (total * retorno_alvo) / peso_pagamento
 
 
 def calcular_multiplicador_jackpot(quantidade_proposicoes):

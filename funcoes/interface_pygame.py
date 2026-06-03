@@ -5,10 +5,17 @@ try:
 except ModuleNotFoundError:
     pygame = None
 
+try:
+    from PIL import Image, ImageSequence
+except ModuleNotFoundError:
+    Image = None
+    ImageSequence = None
+
 from funcoes.constantes import PROPOSICOES
 from funcoes.logica import (
     avaliar_expressao_com_proposicoes,
     calcular_chance_verdadeira,
+    calcular_jackpot_possivel,
     calcular_multiplicador,
     calcular_rodada,
     sortear_proposicoes,
@@ -35,6 +42,59 @@ CAMINHOS_EXPRESSAO = (
     os.path.join(PASTA_RAIZ, "assets", "expressao.png"),
     os.path.join(PASTA_RAIZ, "assets", "expressao_logica.png"),
 )
+CAMINHOS_SALDO = (
+    os.path.join(PASTA_RAIZ, "assets", "saldo.png"),
+)
+CAMINHOS_APOSTA = (
+    os.path.join(PASTA_RAIZ, "assets", "aposta.png"),
+)
+CAMINHOS_PREMISSAS = (
+    os.path.join(PASTA_RAIZ, "assets", "premissas.png"),
+)
+CAMINHOS_GIRAR = (
+    os.path.join(PASTA_RAIZ, "assets", "girar.png"),
+)
+CAMINHOS_MASCOTE = (
+    os.path.join(PASTA_RAIZ, "assets", "mascote_sem_fundo.gif"),
+)
+CAMINHOS_MASCOTE_PARADO = (
+    os.path.join(PASTA_RAIZ, "assets", "mascote_fortune_logica_jackpot.png"),
+)
+CAMINHOS_MUSICA = (
+    os.path.join(PASTA_RAIZ, "assets", "musica.mp3"),
+    os.path.join(PASTA_RAIZ, "assets", "fundo.mp3"),
+    os.path.join(PASTA_RAIZ, "assets", "Fortune Tiger - Official Game Soundtrack & Effects - Gleison (youtube).mp3"),
+)
+CAMINHOS_SOM_SLOT = (
+    os.path.join(PASTA_RAIZ, "assets", "slot.mp3"),
+    os.path.join(PASTA_RAIZ, "assets", "Slot Machine  Casino.mp3"),
+)
+CAMINHOS_SOM_JACKPOT = (
+    os.path.join(PASTA_RAIZ, "assets", "jackpot.mp3"),
+    os.path.join(PASTA_RAIZ, "assets", "Jackpot Sound Effect - Sound Effect Database (youtube).mp3"),
+)
+CAMINHOS_SOM_FAIL = (
+    os.path.join(PASTA_RAIZ, "assets", "fail.mp3"),
+    os.path.join(PASTA_RAIZ, "assets", "Sound Fail (Som de falha) - cantinhodocanudo (youtube).mp3"),
+)
+CAMINHOS_ICONES_OPERADORES = {
+    "E": (
+        os.path.join(PASTA_RAIZ, "assets", "E.png"),
+        os.path.join(PASTA_RAIZ, "assets", "e.png"),
+    ),
+    "OU": (
+        os.path.join(PASTA_RAIZ, "assets", "ou.png"),
+        os.path.join(PASTA_RAIZ, "assets", "OU.png"),
+    ),
+    "SE": (
+        os.path.join(PASTA_RAIZ, "assets", "se.png"),
+        os.path.join(PASTA_RAIZ, "assets", "SE.png"),
+    ),
+    "SSE": (
+        os.path.join(PASTA_RAIZ, "assets", "sse.png"),
+        os.path.join(PASTA_RAIZ, "assets", "SSE.png"),
+    ),
+}
 
 FUNDO = (9, 18, 38)
 PAINEL = (23, 37, 66)
@@ -53,6 +113,13 @@ DOURADO_CLARO = (255, 224, 120)
 ROXO = (91, 58, 154)
 ROXO_ESCURO = (43, 28, 80)
 VERMELHO_ESCURO = (105, 26, 44)
+VOLUME_MUSICA_FUNDO = 0.125
+VOLUME_SOM_SLOT = 0.65
+VOLUME_SOM_JACKPOT = 0.85
+VOLUME_SOM_FAIL = 0.85
+TEMPO_EXTRA_GIRO_MS = 3500
+TEMPO_AUDIO_SLOT_MS = 1500
+INICIO_AUDIO_VITORIA_MS = 4000
 
 OPERADORES = ("E", "OU", "SE", "SSE")
 
@@ -138,7 +205,13 @@ def calcular_preview(tokens, nomes):
         dados["termos"],
         dados["operadores"],
     )
-    multiplicador = calcular_multiplicador(verdadeiros, total)
+    jackpot_possivel = calcular_jackpot_possivel(dados["termos"], dados["operadores"])
+    multiplicador = calcular_multiplicador(
+        verdadeiros,
+        total,
+        len(nomes),
+        jackpot_possivel,
+    )
     chance = (verdadeiros / total) * 100
 
     return {
@@ -155,14 +228,26 @@ def calcular_preview(tokens, nomes):
 
 
 class Botao:
-    def __init__(self, x, y, largura, altura, texto, acao, cor=AZUL_BOTAO, ativo=True):
+    def __init__(self, x, y, largura, altura, texto, acao, cor=AZUL_BOTAO, ativo=True, imagem=None):
         self.rect = pygame.Rect(x, y, largura, altura)
         self.texto = texto
         self.acao = acao
         self.cor = cor
         self.ativo = ativo
+        self.imagem = imagem
 
     def desenhar(self, tela, fonte):
+        if self.imagem is not None:
+            largura, altura = self.imagem.get_size()
+            escala = min(self.rect.w / largura, self.rect.h / altura)
+            destino = pygame.Rect(0, 0, int(largura * escala), int(altura * escala))
+            destino.center = self.rect.center
+            imagem = pygame.transform.smoothscale(self.imagem, (destino.w, destino.h))
+            if not self.ativo:
+                imagem.set_alpha(120)
+            tela.blit(imagem, destino.topleft)
+            return
+
         cor = self.cor if self.ativo else CINZA
         pygame.draw.rect(tela, cor, self.rect, border_radius=10)
         pygame.draw.rect(tela, (106, 143, 197), self.rect, 2, border_radius=10)
@@ -205,16 +290,41 @@ class InterfacePygame:
 
         pygame.init()
         pygame.display.set_caption("Fortune Logica")
-        self.tela = pygame.display.set_mode((LARGURA, ALTURA))
+        self.tela_cheia = False
+        self.janela = None
+        self.tela = pygame.Surface((LARGURA, ALTURA))
+        self.escala_tela = 1
+        self.offset_tela = (0, 0)
+        self.tamanho_tela = (LARGURA, ALTURA)
+        self.criar_janela()
         self.relogio = pygame.time.Clock()
         self.fonte_titulo = pygame.font.SysFont("arial", 42, bold=True)
         self.fonte_expressao = pygame.font.SysFont("arial", 34, bold=True)
         self.fonte_grande = pygame.font.SysFont("arial", 28, bold=True)
+        self.fonte_saldo = pygame.font.SysFont("arial", 30, bold=True)
         self.fonte_media = pygame.font.SysFont("arial", 20, bold=True)
+        self.fonte_premissas = pygame.font.SysFont("arial", 18, bold=True)
         self.fonte_pequena = pygame.font.SysFont("arial", 16, bold=True)
         self.fundo_imagem = self.carregar_fundo()
         self.caca_niquel_imagem = self.carregar_caca_niquel()
         self.expressao_imagem = self.carregar_expressao()
+        self.saldo_imagem = self.carregar_saldo_imagem()
+        self.aposta_imagem = self.carregar_aposta_imagem()
+        self.premissas_imagem = self.carregar_premissas_imagem()
+        self.girar_imagem = self.carregar_girar_imagem()
+        self.icones_operadores = self.carregar_icones_operadores()
+        self.mascote_parado_imagem = self.carregar_mascote_parado()
+        self.mascote_frames, self.mascote_duracoes = self.carregar_mascote_animado()
+        self.musica_ativa = False
+        self.som_slot = None
+        self.som_slot_vitoria = None
+        self.som_jackpot = None
+        self.som_fail = None
+        self.canal_slot = None
+        self.canal_jackpot = None
+        self.canal_fail = None
+        self.iniciar_musica()
+        self.carregar_sons()
 
         self.saldo = carregar_saldo()
         self.aposta = 10
@@ -222,8 +332,8 @@ class InterfacePygame:
         self.aposta_texto = str(self.aposta)
         self.quantidade_texto = str(self.quantidade)
         self.campo_ativo = None
-        self.campo_aposta = CampoTexto(690, 626, 90, 42, "Aposta", self.aposta_texto)
-        self.campo_quantidade = CampoTexto(800, 626, 90, 42, "Premissas", self.quantidade_texto)
+        self.campo_aposta = CampoTexto(296, 635, 76, 30, "Aposta", self.aposta_texto)
+        self.campo_quantidade = CampoTexto(892, 554, 108, 42, "Premissas", self.quantidade_texto)
         self.negacoes = []
         self.operadores_slots = []
         self.proposicoes_sorteadas = {}
@@ -239,6 +349,52 @@ class InterfacePygame:
         self.slot_premissas = []
         self.slot_operadores = []
         self.resetar_slots()
+
+    def criar_janela(self):
+        if self.tela_cheia:
+            info = pygame.display.Info()
+            tamanho = (info.current_w, info.current_h)
+            self.janela = pygame.display.set_mode(tamanho, pygame.FULLSCREEN)
+        else:
+            self.janela = pygame.display.set_mode((LARGURA, ALTURA))
+
+        self.atualizar_viewport()
+
+    def alternar_tela_cheia(self):
+        self.tela_cheia = not self.tela_cheia
+        self.criar_janela()
+
+    def atualizar_viewport(self):
+        largura_janela, altura_janela = self.janela.get_size()
+        escala = min(largura_janela / LARGURA, altura_janela / ALTURA)
+        largura = int(LARGURA * escala)
+        altura = int(ALTURA * escala)
+
+        self.escala_tela = escala
+        self.tamanho_tela = (largura, altura)
+        self.offset_tela = (
+            (largura_janela - largura) // 2,
+            (altura_janela - altura) // 2,
+        )
+
+    def apresentar_tela(self):
+        if self.tamanho_tela == (LARGURA, ALTURA):
+            self.janela.blit(self.tela, (0, 0))
+        else:
+            self.janela.fill(PRETO)
+            imagem = pygame.transform.smoothscale(self.tela, self.tamanho_tela)
+            self.janela.blit(imagem, self.offset_tela)
+
+        pygame.display.flip()
+
+    def posicao_logica_mouse(self, posicao):
+        x = (posicao[0] - self.offset_tela[0]) / self.escala_tela
+        y = (posicao[1] - self.offset_tela[1]) / self.escala_tela
+
+        if not 0 <= x < LARGURA or not 0 <= y < ALTURA:
+            return None
+
+        return int(x), int(y)
 
     def carregar_fundo(self):
         for caminho in CAMINHOS_FUNDO:
@@ -261,6 +417,227 @@ class InterfacePygame:
                 return pygame.image.load(caminho).convert_alpha()
 
         return None
+
+    def recortar_por_alpha(self, imagem):
+        mascara = pygame.mask.from_surface(imagem)
+        caixas = mascara.get_bounding_rects()
+
+        if not caixas:
+            return imagem
+
+        area = caixas[0].copy()
+        for caixa in caixas[1:]:
+            area.union_ip(caixa)
+
+        return imagem.subsurface(area).copy()
+
+    def carregar_imagem_recortada(self, caminhos, recorte=None):
+        for caminho in caminhos:
+            if os.path.exists(caminho):
+                imagem = pygame.image.load(caminho).convert_alpha()
+                if recorte is not None:
+                    area = pygame.Rect(recorte).clip(imagem.get_rect())
+                    imagem = imagem.subsurface(area).copy()
+                return self.recortar_por_alpha(imagem)
+
+        return None
+
+    def carregar_saldo_imagem(self):
+        return self.carregar_imagem_recortada(CAMINHOS_SALDO)
+
+    def carregar_aposta_imagem(self):
+        return self.carregar_imagem_recortada(CAMINHOS_APOSTA)
+
+    def carregar_premissas_imagem(self):
+        return self.carregar_imagem_recortada(CAMINHOS_PREMISSAS)
+
+    def carregar_girar_imagem(self):
+        return self.carregar_imagem_recortada(CAMINHOS_GIRAR)
+
+    def carregar_mascote_parado(self):
+        imagem = self.carregar_imagem_recortada(CAMINHOS_MASCOTE_PARADO)
+        if imagem is None:
+            return None
+
+        largura, altura = imagem.get_size()
+        escala = min(270 / largura, 412 / altura)
+        tamanho = (int(largura * escala), int(altura * escala))
+        return pygame.transform.smoothscale(imagem, tamanho)
+
+    def carregar_icones_operadores(self):
+        icones = {}
+
+        for operador, caminhos in CAMINHOS_ICONES_OPERADORES.items():
+            for caminho in caminhos:
+                if os.path.exists(caminho):
+                    icones[operador] = pygame.image.load(caminho).convert_alpha()
+                    break
+
+        return icones
+
+    def carregar_mascote_animado(self):
+        if Image is None or ImageSequence is None:
+            return [], []
+
+        for caminho in CAMINHOS_MASCOTE:
+            if not os.path.exists(caminho):
+                continue
+
+            try:
+                gif = Image.open(caminho)
+                frames = []
+                duracoes = []
+                duracao_pendente = 0
+
+                for indice, frame in enumerate(ImageSequence.Iterator(gif)):
+                    duracao_pendente += frame.info.get("duration", gif.info.get("duration", 40))
+
+                    if indice % 2:
+                        continue
+
+                    imagem = frame.convert("RGBA")
+                    imagem.thumbnail((360, 550), Image.Resampling.LANCZOS)
+                    superficie = pygame.image.fromstring(imagem.tobytes(), imagem.size, "RGBA").convert_alpha()
+                    frames.append(superficie)
+                    duracoes.append(max(20, duracao_pendente))
+                    duracao_pendente = 0
+
+                if duracao_pendente and duracoes:
+                    duracoes[-1] += duracao_pendente
+
+                if frames:
+                    return frames, duracoes
+            except (OSError, pygame.error):
+                continue
+
+        return [], []
+
+    def iniciar_musica(self):
+        for caminho in CAMINHOS_MUSICA:
+            if not os.path.exists(caminho):
+                continue
+
+            try:
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init()
+
+                pygame.mixer.music.load(caminho)
+                pygame.mixer.music.set_volume(VOLUME_MUSICA_FUNDO)
+                pygame.mixer.music.play(-1)
+                self.musica_ativa = True
+            except pygame.error:
+                self.musica_ativa = False
+
+            return
+
+    def recortar_som(self, som, inicio_ms=0, limite_ms=None):
+        configuracao = pygame.mixer.get_init()
+        if configuracao is None:
+            return som
+
+        frequencia, tamanho, canais = configuracao
+        bytes_por_amostra = abs(tamanho) // 8
+        bytes_por_frame = canais * bytes_por_amostra
+        inicio_bytes = int(frequencia * inicio_ms / 1000) * bytes_por_frame
+        fim_bytes = None
+
+        if limite_ms is not None:
+            total_bytes = int(frequencia * limite_ms / 1000) * bytes_por_frame
+            fim_bytes = inicio_bytes + total_bytes
+
+        dados = som.get_raw()[inicio_bytes:fim_bytes]
+
+        if not dados:
+            return None
+
+        return pygame.mixer.Sound(buffer=dados)
+
+    def carregar_som(self, caminhos, volume, limite_ms=None, inicio_ms=0):
+        if not pygame.mixer.get_init():
+            try:
+                pygame.mixer.init()
+            except pygame.error:
+                return None
+
+        for caminho in caminhos:
+            if not os.path.exists(caminho):
+                continue
+
+            try:
+                som = pygame.mixer.Sound(caminho)
+                som = self.recortar_som(som, inicio_ms, limite_ms)
+                if som is None:
+                    continue
+                som.set_volume(volume)
+                return som
+            except pygame.error:
+                continue
+
+        return None
+
+    def carregar_sons(self):
+        self.som_slot = self.carregar_som(CAMINHOS_SOM_SLOT, VOLUME_SOM_SLOT, TEMPO_AUDIO_SLOT_MS)
+        self.som_slot_vitoria = self.carregar_som(CAMINHOS_SOM_SLOT, VOLUME_SOM_SLOT, inicio_ms=INICIO_AUDIO_VITORIA_MS)
+        self.som_jackpot = self.carregar_som(CAMINHOS_SOM_JACKPOT, VOLUME_SOM_JACKPOT)
+        self.som_fail = self.carregar_som(CAMINHOS_SOM_FAIL, VOLUME_SOM_FAIL)
+
+    def parar_sons_de_rodada(self):
+        if self.canal_slot is not None:
+            self.canal_slot.stop()
+            self.canal_slot = None
+
+        if self.canal_jackpot is not None:
+            self.canal_jackpot.stop()
+            self.canal_jackpot = None
+
+        if self.canal_fail is not None:
+            self.canal_fail.stop()
+            self.canal_fail = None
+
+    def tocar_som_slot(self):
+        if self.som_slot is None:
+            return
+
+        if self.canal_slot is not None:
+            self.canal_slot.stop()
+
+        self.canal_slot = self.som_slot.play(loops=-1)
+
+    def tocar_som_slot_vitoria(self):
+        if self.canal_slot is not None:
+            self.canal_slot.stop()
+            self.canal_slot = None
+
+        if self.som_slot_vitoria is None:
+            return
+
+        self.canal_slot = self.som_slot_vitoria.play()
+
+    def tocar_som_jackpot(self):
+        if self.canal_slot is not None:
+            self.canal_slot.stop()
+            self.canal_slot = None
+
+        if self.som_jackpot is None:
+            return
+
+        if self.canal_jackpot is not None:
+            self.canal_jackpot.stop()
+
+        self.canal_jackpot = self.som_jackpot.play(loops=-1)
+
+    def tocar_som_fail(self):
+        if self.canal_slot is not None:
+            self.canal_slot.stop()
+            self.canal_slot = None
+
+        if self.som_fail is None:
+            return
+
+        if self.canal_fail is not None:
+            self.canal_fail.stop()
+
+        self.canal_fail = self.som_fail.play()
 
     def desenhar_fundo(self):
         if self.fundo_imagem is not None:
@@ -387,6 +764,7 @@ class InterfacePygame:
         self.status = "Expressao limpa."
 
     def continuar_depois_resultado(self):
+        self.parar_sons_de_rodada()
         self.tela_resultado = False
         self.resultado = ""
         self.ultima_rodada = {}
@@ -453,6 +831,7 @@ class InterfacePygame:
         self.proposicoes_sorteadas = {}
         self.inicio_animacao = pygame.time.get_ticks()
         self.animando = True
+        self.tocar_som_slot()
         self.status = "Girando os rolos... aguarde o resultado."
 
     def finalizar_animacao(self):
@@ -475,15 +854,33 @@ class InterfacePygame:
         self.status = "Rodada finalizada. Ajuste ou gire de novo."
         self.tela_resultado = True
 
+        if self.resultado_pendente["jackpot"]:
+            self.tocar_som_jackpot()
+        elif self.resultado_pendente["resultado_logico"]:
+            self.tocar_som_slot_vitoria()
+        else:
+            self.tocar_som_fail()
+
     def criar_botoes(self, preview):
         self.botoes = []
         if self.tela_resultado:
             self.botoes.append(Botao(440, 585, 220, 58, "CONTINUAR", self.continuar_depois_resultado, AZUL_BOTAO))
             return
 
-        self.botoes.append(Botao(70, 626, 120, 42, "LIMPAR", self.limpar_expressao, VERMELHO))
         texto_girar = "GIRANDO..." if self.animando else "GIRAR"
-        self.botoes.append(Botao(440, 620, 220, 54, texto_girar, self.girar, VERDE, preview["valida"] and self.campos_validos() and not self.animando))
+        self.botoes.append(
+            Botao(
+                360,
+                598,
+                360,
+                108,
+                texto_girar,
+                self.girar,
+                VERDE,
+                preview["valida"] and self.campos_validos() and not self.animando,
+                self.girar_imagem,
+            )
+        )
 
     def desenhar_texto(self, texto, x, y, fonte, cor=BRANCO):
         superficie = fonte.render(texto, True, cor)
@@ -498,6 +895,60 @@ class InterfacePygame:
         pygame.draw.rect(superficie, (*cor, alpha), superficie.get_rect(), border_radius=18)
         pygame.draw.rect(superficie, (*borda, 230), superficie.get_rect(), 2, border_radius=18)
         self.tela.blit(superficie, rect.topleft)
+
+    def desenhar_saldo(self):
+        rect = pygame.Rect(4, ALTURA - 94, 270, 84)
+
+        if self.saldo_imagem is not None:
+            imagem = pygame.transform.smoothscale(self.saldo_imagem, (rect.w, rect.h))
+            self.tela.blit(imagem, rect.topleft)
+            valor_rect = pygame.Rect(rect.x + 118, rect.y + 18, 104, 48)
+            self.desenhar_texto_centralizado(str(self.saldo), valor_rect, self.fonte_saldo, DOURADO_CLARO)
+            return
+
+        self.desenhar_painel_transparente(rect, ROXO_ESCURO, 190)
+        self.desenhar_texto(f"Saldo: {self.saldo}", rect.x + 27, rect.y + 26, self.fonte_saldo, DOURADO_CLARO)
+
+    def desenhar_premissas_controle(self):
+        rect = pygame.Rect(LARGURA - 202, ALTURA - 82, 180, 72)
+
+        if self.premissas_imagem is not None:
+            imagem = pygame.transform.smoothscale(self.premissas_imagem, (rect.w, rect.h))
+            self.tela.blit(imagem, rect.topleft)
+        else:
+            self.desenhar_painel_transparente(rect, ROXO_ESCURO, 190)
+            self.desenhar_texto_centralizado("Premissas:", pygame.Rect(rect.x, rect.y + 10, rect.w, 18), self.fonte_pequena, DOURADO_CLARO)
+
+        self.campo_quantidade.rect = pygame.Rect(rect.x + 61, rect.y + 32, 58, 27)
+        texto = self.quantidade_texto
+        if self.campo_ativo == "quantidade":
+            texto += "|"
+
+        texto_rect = pygame.Rect(self.campo_quantidade.rect.x, self.campo_quantidade.rect.y - 3, self.campo_quantidade.rect.w, self.campo_quantidade.rect.h)
+        self.desenhar_texto_centralizado(texto, texto_rect, self.fonte_premissas, DOURADO_CLARO)
+
+    def desenhar_aposta(self):
+        rect = pygame.Rect(690, ALTURA - 95, 190, 96)
+        painel_rect = rect
+
+        if self.aposta_imagem is not None:
+            painel_rect = self.desenhar_imagem_proporcional(self.aposta_imagem, rect)
+        else:
+            self.desenhar_painel_transparente(rect, ROXO_ESCURO, 190)
+            self.desenhar_texto_centralizado("Aposta:", pygame.Rect(rect.x, rect.y + 12, rect.w, 20), self.fonte_pequena, DOURADO_CLARO)
+
+        self.campo_aposta.rect = pygame.Rect(
+            painel_rect.x + int(painel_rect.w * 0.22),
+            painel_rect.y + int(painel_rect.h * 0.55),
+            int(painel_rect.w * 0.56),
+            int(painel_rect.h * 0.26),
+        )
+
+        texto = self.aposta_texto
+        if self.campo_ativo == "aposta":
+            texto += "|"
+
+        self.desenhar_texto_centralizado(texto, self.campo_aposta.rect, self.fonte_media, DOURADO_CLARO)
 
     def desenhar_moldura_slot(self, rect):
         sombra = rect.move(0, 8)
@@ -518,10 +969,41 @@ class InterfacePygame:
         superficie = fonte.render(texto, True, cor)
         self.tela.blit(superficie, superficie.get_rect(center=rect.center))
 
+    def desenhar_imagem_proporcional(self, imagem, rect):
+        largura, altura = imagem.get_size()
+        escala = min(rect.w / largura, rect.h / altura)
+        destino = pygame.Rect(0, 0, int(largura * escala), int(altura * escala))
+        destino.center = rect.center
+        imagem_escalada = pygame.transform.smoothscale(imagem, (destino.w, destino.h))
+        self.tela.blit(imagem_escalada, destino.topleft)
+        return destino
+
     def desenhar_imagem_recortada(self, imagem, origem, destino):
         recorte = imagem.subsurface(origem).copy()
         recorte = pygame.transform.smoothscale(recorte, (destino.w, destino.h))
         self.tela.blit(recorte, destino.topleft)
+
+    def desenhar_icone_operador(self, operador, rect, fonte):
+        icone = self.icones_operadores.get(operador)
+
+        if icone is None:
+            self.desenhar_texto_centralizado(operador or "?", rect, fonte, DESTAQUE)
+            return
+
+        largura, altura = icone.get_size()
+        tamanho_recorte = min(largura, altura, 520)
+        origem = pygame.Rect(
+            largura // 2 - tamanho_recorte // 2,
+            altura // 2 - tamanho_recorte // 2,
+            tamanho_recorte,
+            tamanho_recorte,
+        )
+        destino = rect.inflate(-6, -6)
+
+        if destino.w <= 0 or destino.h <= 0:
+            destino = rect
+
+        self.desenhar_imagem_recortada(icone, origem, destino)
 
     def valor_animado_do_rolo(self, nome, indice):
         if not self.animando:
@@ -531,7 +1013,7 @@ class InterfacePygame:
 
         agora = pygame.time.get_ticks()
         tempo = agora - self.inicio_animacao
-        tempo_parada = 900 + indice * 450
+        tempo_parada = TEMPO_EXTRA_GIRO_MS + 900 + indice * 450
         proposicoes_finais = self.resultado_pendente.get("proposicoes", {})
 
         if tempo >= tempo_parada and nome in proposicoes_finais:
@@ -545,9 +1027,38 @@ class InterfacePygame:
         if not self.animando:
             return
 
-        tempo_total = 900 + (self.quantidade - 1) * 450 + 650
+        tempo_total = TEMPO_EXTRA_GIRO_MS + 900 + (self.quantidade - 1) * 450 + 650
         if pygame.time.get_ticks() - self.inicio_animacao >= tempo_total:
             self.finalizar_animacao()
+
+    def frame_atual_mascote(self):
+        if not self.mascote_frames:
+            return None
+
+        tempo = (pygame.time.get_ticks() - self.inicio_animacao) % sum(self.mascote_duracoes)
+        acumulado = 0
+
+        for frame, duracao in zip(self.mascote_frames, self.mascote_duracoes):
+            acumulado += duracao
+            if tempo < acumulado:
+                return frame
+
+        return self.mascote_frames[-1]
+
+    def desenhar_mascote(self):
+        if self.animando or self.tela_resultado:
+            imagem = self.frame_atual_mascote()
+            posicao = (980, 760)
+        else:
+            imagem = self.mascote_parado_imagem
+            posicao = (940, 610)
+
+        if imagem is None:
+            return
+
+        destino = imagem.get_rect()
+        destino.midbottom = posicao
+        self.tela.blit(imagem, destino.topleft)
 
     def desenhar_slot(self):
         rect = pygame.Rect(245, 105, 610, 407)
@@ -599,14 +1110,16 @@ class InterfacePygame:
             self.desenhar_texto_centralizado(nome, pygame.Rect(x, inicio_y + 6, largura_caixa, 18), self.fonte_pequena, ROXO_ESCURO)
             self.desenhar_texto_centralizado(valor, pygame.Rect(x, inicio_y + 24, largura_caixa, 42), self.fonte_titulo, cor_valor)
 
+        self.desenhar_mascote()
+
     def desenhar_pagina_resultado(self):
         self.desenhar_fundo()
 
         if self.fundo_imagem is None:
             self.desenhar_texto("FORTUNE LOGICA", 70, 35, self.fonte_titulo, DESTAQUE)
 
-        self.desenhar_painel_transparente(pygame.Rect(55, 72, 190, 54), ROXO_ESCURO, 190)
-        self.desenhar_texto(f"Saldo: {self.saldo}", 82, 90, self.fonte_media, DOURADO_CLARO)
+        self.desenhar_saldo()
+        self.desenhar_mascote()
 
         painel = pygame.Rect(275, 235, 550, 330)
         cor_painel = DESTAQUE_ESCURO if self.ultima_rodada.get("jackpot") else PAINEL_ESCURO
@@ -651,7 +1164,7 @@ class InterfacePygame:
         for botao in self.botoes:
             botao.desenhar(self.tela, self.fonte_pequena)
 
-        pygame.display.flip()
+        self.apresentar_tela()
 
     def desenhar_expressao_slots(self, preview):
         self.slot_premissas = []
@@ -686,9 +1199,9 @@ class InterfacePygame:
 
             texto = nome
             if self.negacoes[indice]:
-                texto = f"NAO {nome}"
+                texto = f"~{nome}"
 
-            self.desenhar_texto_centralizado(texto, premissa_rect, fonte_slot, BRANCO)
+            self.desenhar_texto_centralizado(texto, premissa_rect, fonte_slot, DOURADO_CLARO)
 
             x += premise_w + gap
 
@@ -699,7 +1212,7 @@ class InterfacePygame:
                 cor = (52, 89, 154) if operador is not None else (28, 39, 65)
                 pygame.draw.rect(self.tela, cor, operador_rect, border_radius=12)
                 pygame.draw.rect(self.tela, CLARO, operador_rect, 2, border_radius=12)
-                self.desenhar_texto_centralizado(operador or "?", operador_rect, fonte_slot, DESTAQUE)
+                self.desenhar_icone_operador(operador, operador_rect, fonte_slot)
                 x += operator_w + gap
 
         if preview["valida"]:
@@ -723,20 +1236,9 @@ class InterfacePygame:
         if self.fundo_imagem is None:
             self.desenhar_texto("FORTUNE LOGICA", 70, 35, self.fonte_titulo, DESTAQUE)
 
-        self.desenhar_painel_transparente(pygame.Rect(55, 72, 190, 54), ROXO_ESCURO, 190)
-        self.desenhar_texto(f"Saldo: {self.saldo}", 82, 90, self.fonte_media, DOURADO_CLARO)
-        self.campo_aposta.desenhar(
-            self.tela,
-            self.fonte_media,
-            self.fonte_pequena,
-            self.campo_ativo == "aposta",
-        )
-        self.campo_quantidade.desenhar(
-            self.tela,
-            self.fonte_media,
-            self.fonte_pequena,
-            self.campo_ativo == "quantidade",
-        )
+        self.desenhar_saldo()
+        self.desenhar_aposta()
+        self.desenhar_premissas_controle()
 
         self.desenhar_slot()
 
@@ -800,6 +1302,12 @@ class InterfacePygame:
             if evento.type == pygame.QUIT:
                 self.rodando = False
             elif evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_F11 or (
+                    evento.key == pygame.K_RETURN and evento.mod & pygame.KMOD_ALT
+                ):
+                    self.alternar_tela_cheia()
+                    continue
+
                 if self.animando:
                     continue
                 self.tratar_digitacao(evento)
@@ -807,35 +1315,39 @@ class InterfacePygame:
                 if self.animando:
                     continue
 
+                posicao = self.posicao_logica_mouse(evento.pos)
+                if posicao is None:
+                    continue
+
                 if self.tela_resultado:
                     for botao in self.botoes:
-                        if botao.clicou(evento.pos):
+                        if botao.clicou(posicao):
                             botao.acao()
                             break
                     return
 
-                if self.campo_aposta.clicou(evento.pos):
+                if self.campo_aposta.clicou(posicao):
                     self.campo_ativo = "aposta"
                     return
 
-                if self.campo_quantidade.clicou(evento.pos):
+                if self.campo_quantidade.clicou(posicao):
                     self.campo_ativo = "quantidade"
                     return
 
                 self.campo_ativo = None
 
                 for rect, indice in self.slot_premissas:
-                    if rect.collidepoint(evento.pos):
+                    if rect.collidepoint(posicao):
                         self.alternar_negacao(indice)
                         return
 
                 for rect, indice in self.slot_operadores:
-                    if rect.collidepoint(evento.pos):
+                    if rect.collidepoint(posicao):
                         self.alternar_operador(indice)
                         return
 
                 for botao in self.botoes:
-                    if botao.clicou(evento.pos):
+                    if botao.clicou(posicao):
                         botao.acao()
                         break
 

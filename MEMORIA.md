@@ -26,18 +26,21 @@ Este arquivo guarda as decisoes principais do projeto para facilitar futuras alt
 
 - Jackpot so acontece quando todas as proposicoes sorteadas forem `V` e a expressao final tambem for `V`.
 - O bonus do jackpot usa a quantidade de proposicoes.
-- Exemplo: com 3 proposicoes e multiplicador base `x2`, o bonus jackpot e `x3`, entao o multiplicador final vira `x6`.
+- O possivel bonus do jackpot ja entra no calculo do multiplicador base, para evitar vantagem matematica do jogador.
+- Exemplo: com 2 proposicoes, `P E Q` tem chance de 1/4 e jackpot possivel. O multiplicador base vira `x1.80`; se cair jackpot, o multiplicador final vira `x3.60`.
 
 ## Multiplicador
 
 - O multiplicador base vem da chance da expressao dar verdadeiro na tabela-verdade.
+- O retorno alvo do jogador e 90%, deixando 10% de vantagem para o cassino.
 - Formula:
 
 ```text
-multiplicador = total_de_linhas / linhas_verdadeiras
+multiplicador = (total_de_linhas * 0.90) / (linhas_verdadeiras + peso_do_jackpot)
 ```
 
 - Quanto menor a chance de uma expressao dar verdadeiro, maior o multiplicador.
+- Se a expressao puder ativar jackpot, `peso_do_jackpot` desconta o bonus extra antes da aposta.
 
 ## Operadores
 
